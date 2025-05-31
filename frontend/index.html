@@ -1,0 +1,231 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Générateur IA de Diagrammes</title>
+
+  <!-- Librairie zoom/pan -->
+  <script src="https://cdn.jsdelivr.net/npm/svg-pan-zoom@3.6.1/dist/svg-pan-zoom.min.js"></script>
+  <!-- Export PNG -->
+  <script src="https://cdn.jsdelivr.net/npm/save-svg-as-png@1.4.17/lib/saveSvgAsPng.min.js"></script>
+
+  <style>
+    :root {
+      --primary: #1a73e8;
+      --primary-dark: #1558b0;
+      --bg: #f4f6fa;
+      --white: #fff;
+      --text: #333;
+      --grey: #555;
+      --border: #ccc;
+    }
+
+    body {
+      margin: 0;
+      font-family: "Segoe UI", sans-serif;
+      background-color: var(--bg);
+      color: var(--text);
+    }
+
+    .container {
+      max-width: 900px;
+      margin: 50px auto;
+      background-color: var(--white);
+      border-radius: 12px;
+      padding: 30px;
+      box-shadow: 0 5px 20px rgba(0,0,0,0.05);
+    }
+
+    h1 {
+      text-align: center;
+      color: var(--primary-dark);
+      margin-bottom: 10px;
+    }
+
+    p {
+      text-align: center;
+      color: var(--grey);
+      margin-bottom: 30px;
+    }
+
+    textarea {
+      width: 100%;
+      padding: 14px;
+      border-radius: 8px;
+      border: 1px solid var(--border);
+      font-size: 16px;
+      resize: vertical;
+    }
+
+    .actions, .zoom-controls {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 10px;
+      margin-top: 20px;
+      justify-content: center;
+    }
+
+    button {
+      background-color: var(--primary);
+      color: white;
+      border: none;
+      padding: 12px 20px;
+      border-radius: 8px;
+      font-size: 16px;
+      cursor: pointer;
+      transition: background-color 0.3s;
+    }
+
+    button:hover {
+      background-color: var(--primary-dark);
+    }
+
+    .diagram {
+      margin-top: 30px;
+      border: 1px solid var(--border);
+      background-color: #fafafa;
+      border-radius: 8px;
+      padding: 10px;
+      overflow: hidden;
+      height: 600px;
+    }
+
+    #diagramContainer svg {
+      width: 100%;
+      height: 100%;
+      display: block;
+    }
+
+    #status {
+      text-align: center;
+      font-weight: 500;
+      margin-top: 20px;
+    }
+
+    @media (max-width: 600px) {
+      .container {
+        margin: 20px;
+        padding: 20px;
+      }
+
+      button {
+        width: 100%;
+      }
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <h1>🧠 Générateur IA de Diagrammes</h1>
+    <p>Décrivez le diagramme à générer. Vous pourrez interagir avec l'image ensuite.</p>
+
+    <textarea id="userInput" placeholder="Ex: Crée un diagramme de classe avec Étudiant, Professeur et Cours..."></textarea>
+
+    <div class="actions">
+      <button onclick="generateDiagram()">Générer</button>
+      <button onclick="resetAll()">Réinitialiser</button>
+      <button onclick="exportPNG()">📤 Export PNG</button>
+    </div>
+
+    <div class="zoom-controls">
+      <button onclick="zoomIn()">🔍 Zoom +</button>
+      <button onclick="zoomOut()">🔎 Zoom -</button>
+      <button onclick="resetZoom()">🎯 Centrer</button>
+    </div>
+
+    <div id="status"></div>
+    <div class="diagram" id="diagramContainer"></div>
+  </div>
+
+  <script>
+    let panZoomInstance = null;
+
+    function resetAll() {
+      document.getElementById("userInput").value = "";
+      document.getElementById("diagramContainer").innerHTML = "";
+      document.getElementById("status").textContent = "";
+      panZoomInstance = null;
+    }
+
+    async function generateDiagram() {
+      const input = document.getElementById("userInput").value.trim();
+      const status = document.getElementById("status");
+      const container = document.getElementById("diagramContainer");
+
+      if (!input) return;
+
+      status.textContent = "⏳ Génération en cours...";
+      container.innerHTML = "";
+      panZoomInstance = null;
+
+      try {
+        const response = await fetch("http://127.0.0.1:5000/generate", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ input })
+        });
+
+        if (!response.ok) throw new Error(`Erreur ${response.status}`);
+
+        const data = await response.json();
+        if (data.success) {
+          status.textContent = "✅ Diagramme généré";
+          container.innerHTML = data.svg;
+          enablePanZoom();
+        } else {
+          status.textContent = "❌ Erreur : " + data.error;
+        }
+      } catch (error) {
+        status.textContent = "❌ Échec : " + error.message;
+      }
+    }
+
+    function enablePanZoom() {
+      const svg = document.querySelector("#diagramContainer svg");
+      if (!svg) return;
+
+      svg.setAttribute("width", "100%");
+      svg.setAttribute("height", "100%");
+      svg.removeAttribute("viewBox"); // important si le zoom est bizarre
+
+      panZoomInstance = svgPanZoom(svg, {
+        zoomEnabled: true,
+        panEnabled: true,
+        controlIconsEnabled: false,
+        minZoom: 0.5,
+        maxZoom: 5,
+        fit: true,
+        center: true
+      });
+
+      panZoomInstance.zoom(1);
+      panZoomInstance.center();
+      panZoomInstance.fit();
+    }
+
+    function zoomIn() {
+      if (panZoomInstance) panZoomInstance.zoomIn();
+    }
+
+    function zoomOut() {
+      if (panZoomInstance) panZoomInstance.zoomOut();
+    }
+
+    function resetZoom() {
+      if (panZoomInstance) {
+        panZoomInstance.resetZoom();
+        panZoomInstance.center();
+        panZoomInstance.fit();
+      }
+    }
+
+    function exportPNG() {
+      const svg = document.querySelector("#diagramContainer svg");
+      if (!svg) return;
+      svg.setAttribute("xmlns", "http://www.w3.org/2000/svg");
+      saveSvgAsPng(svg, "diagramme.png", { scale: 2 });
+    }
+  </script>
+</body>
+</html>
